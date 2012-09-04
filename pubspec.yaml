@@ -1,0 +1,7 @@
+name: dart-openctm
+version: 1.0.0
+description: >
+  A port of js-openctm to Dart
+dependencies:
+  lzma.dart:
+    git: git://github.com/nelsonsilva/dart-lzma.git
