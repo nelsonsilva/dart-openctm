@@ -19,7 +19,7 @@ class File {
 }
 
 class FileHeader {
-  var fileFormat,
+  int fileFormat,
       compressionMethod,
       vertexCount,
       triangleCount,
@@ -40,47 +40,46 @@ class FileHeader {
     comment = stream.readString();
   }
 
-  get hasNormals => flags & Flags.NORMALS;
+  bool get hasNormals => (flags & Flags.NORMALS) > 0;
 }
 
 class FileBody {
   
-  Uint32Array indices;
-  Float32Array vertices,
+  html.Uint32Array indices;
+  html.Float32Array vertices,
                normals;
 
-  List<Map<String, Float32Array>> uvMaps, attrMaps;
+  List<Map<String, html.Float32Array>> uvMaps, attrMaps;
   
-  FileBody(header) {
+  FileBody(FileHeader header) {
     var i = header.triangleCount * 3,
         v = header.vertexCount * 3,
-        n = header.hasNormals()? header.vertexCount * 3: 0,
+        n = header.hasNormals ? header.vertexCount * 3: 0,
         u = header.vertexCount * 2,
         a = header.vertexCount * 4,
         j = 0;
   
-    var data = new ArrayBuffer(
+    var data = new html.ArrayBuffer(
       (i + v + n + (u * header.uvMapCount) + (a * header.attrMapCount) ) * 4);
   
-    indices = new Uint32Array.fromBuffer(data, 0, i);
-  
-    vertices = new Float32Array.fromBuffer(data, i * 4, v);
-  
+    indices = new html.Uint32Array.fromBuffer(data, 0, i);
+    vertices = new html.Float32Array.fromBuffer(data, i * 4, v);
+    
     if ( header.hasNormals ){
-      normals = new Float32Array.fromBuffer(data, (i + v) * 4, n);
+      normals = new html.Float32Array.fromBuffer(data, (i + v) * 4, n);
     }
     
-    if (header.uvMapCount){
+    if (header.uvMapCount > 0){
       uvMaps = new List(header.uvMapCount);
       for (j = 0; j < header.uvMapCount; ++ j){
-        uvMaps[j] = {"uv": new Float32Array.fromBuffer(data, (i + v + n + (j * u) ) * 4, u) };
+        uvMaps[j] = {"uv": new html.Float32Array.fromBuffer(data, (i + v + n + (j * u) ) * 4, u) };
       }
     }
     
-    if (header.attrMapCount){
+    if (header.attrMapCount > 0){
       attrMaps = new List(header.attrMapCount);
       for (j = 0; j < header.attrMapCount; ++ j){
-        attrMaps[j] = {"attr": new Float32Array.fromBuffer(data,
+        attrMaps[j] = {"attr": new html.Float32Array.fromBuffer(data,
           (i + v + n + (u * header.uvMapCount) + (j * a) ) * 4, a) };
       }
     }

@@ -28,8 +28,9 @@ References:
 
 #library("ctm");
 
-#import("dart:html");
+#import("dart:html", prefix: 'html');
 #import("dart:math", prefix: 'Math');
+#import("packages/fixnum/fixnum.dart");
 #import("packages/dart-lzma/src/lzma.dart", prefix: 'LZMA');
 
 #source("lib/file.dart");
@@ -75,20 +76,20 @@ restoreGridIndices(gridIndices, len){
   }
 }
 
-restoreVertices(vertices, grid, gridIndices, precision){
-  var gridIdx, delta, x, y, z,
-      intVertices = new Uint32Array.fromBuffer(vertices.buffer, vertices.byteOffset, vertices.length),
-      ydiv = grid.divx, zdiv = ydiv * grid.divy,
+restoreVertices(html.Float32Array vertices, FileMG2Header grid, html.Uint32Array gridIndices, num precision){
+  var gridIdx, delta, x, y, z;
+  html.Uint32Array intVertices = new html.Uint32Array.fromBuffer(vertices.buffer, vertices.byteOffset, vertices.length);
+  var ydiv = grid.divx, zdiv = ydiv * grid.divy,
       prevGridIdx = 0x7fffffff, prevDelta = 0,
       i = 0, j = 0, len = gridIndices.length;
 
   for (; i < len; j += 3){
     x = gridIdx = gridIndices[i ++];
     
-    z = ~~(x / zdiv);
-    x -= ~~(z * zdiv);
-    y = ~~(x / ydiv);
-    x -= ~~(y * ydiv);
+    z = ~~(x / zdiv).toInt();
+    x -= ~~(z * zdiv).toInt();
+    y = ~~(x / ydiv).toInt();
+    x -= ~~(y * ydiv).toInt();
 
     delta = intVertices[j];
     if (gridIdx === prevGridIdx){
@@ -110,7 +111,7 @@ restoreVertices(vertices, grid, gridIndices, precision){
 restoreNormals(normals, smooth, precision){
   var ro, phi, theta, sinPhi,
       nx, ny, nz, by, bz, len,
-      intNormals = new Uint32Array.fromBuffer(normals.buffer, normals.byteOffset, normals.length),
+      intNormals = new html.Uint32Array.fromBuffer(normals.buffer, normals.byteOffset, normals.length),
       i = 0, k = normals.length,
       PI_DIV_2 = 3.141592653589793238462643 * 0.5;
 
@@ -158,7 +159,7 @@ restoreNormals(normals, smooth, precision){
 
 restoreMap(map, count, precision){
   var delta, value,
-      intMap = new Uint32Array.fromBuffer(map.buffer, map.byteOffset, map.length),
+      intMap = new html.Uint32Array.fromBuffer(map.buffer, map.byteOffset, map.length),
       i = 0, j, len = map.length;
 
   for (; i < count; ++ i){
@@ -175,7 +176,7 @@ restoreMap(map, count, precision){
 }
 
 calcSmoothNormals(indices, vertices){
-  var smooth = new Float32Array(vertices.length),
+  var smooth = new html.Float32Array(vertices.length),
       indx, indy, indz, nx, ny, nz,
       v1x, v1y, v1z, v2x, v2y, v2z, len,
       i, k;
@@ -232,9 +233,9 @@ calcSmoothNormals(indices, vertices){
 }
 
 bool get isLittleEndian() {
-  var buffer = new ArrayBuffer(2),
-      bytes = new Uint8Array.fromBuffer(buffer),
-      ints = new Uint16Array.fromBuffer(buffer);
+  var buffer = new html.ArrayBuffer(2),
+      bytes = new html.Uint8Array.fromBuffer(buffer),
+      ints = new html.Uint16Array.fromBuffer(buffer);
 
   bytes[0] = 1;
 

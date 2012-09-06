@@ -1,17 +1,17 @@
 class InterleavedStream implements LZMA.OutStream {
-  Uint8Array data;
+  html.Uint8Array data;
   int offset;
   int count;
   int length;
   
   InterleavedStream(data, count) {
-    data = new Uint8Array.fromBuffer(data.buffer, data.byteOffset, data.byteLength);
-    offset = isLittleEndian? 3: 0;
-    count = count * 4;
-    length = data.length;
+    this.data = new html.Uint8Array.fromBuffer(data.buffer, data.byteOffset, data.byteLength);
+    this.offset = isLittleEndian? 3: 0;
+    this.count = count * 4;
+    this.length = this.data.length;
   }
 
-  writeByte(value){
+  void writeByte(final int value){
     data[offset] = value;
     
     offset += count;
