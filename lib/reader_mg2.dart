@@ -24,7 +24,7 @@ class ReaderMG2 extends Reader {
     stream.readInt32(); //packed size
   
     var interleaved = new InterleavedStream(vertices, 3);
-    LZMA.decompress(stream, interleaved);
+    LZMA.decompress(stream, interleaved, interleaved.data.length);
     
     var gridIndices = this.readGridIndices(stream, vertices);
     
@@ -38,7 +38,7 @@ class ReaderMG2 extends Reader {
     var gridIndices = new Uint32Array(vertices.length / 3);
     
     var interleaved = new InterleavedStream(gridIndices, 1);
-    LZMA.decompress(stream, interleaved);
+    LZMA.decompress(stream, interleaved, interleaved.data.length);
     
     restoreGridIndices(gridIndices, gridIndices.length);
     
@@ -50,7 +50,7 @@ class ReaderMG2 extends Reader {
     stream.readInt32(); //packed size
   
     var interleaved = new InterleavedStream(indices, 3);
-    LZMA.decompress(stream, interleaved);
+    LZMA.decompress(stream, interleaved, interleaved.data.length);
   
     restoreIndices(indices, indices.length);
   }
@@ -60,7 +60,7 @@ class ReaderMG2 extends Reader {
     stream.readInt32(); //packed size
   
     var interleaved = new InterleavedStream(body.normals, 3);
-    LZMA.decompress(stream, interleaved);
+    LZMA.decompress(stream, interleaved, interleaved.data.length);
   
     var smooth = calcSmoothNormals(body.indices, body.vertices);
   
@@ -80,7 +80,7 @@ class ReaderMG2 extends Reader {
       stream.readInt32(); //packed size
   
       var interleaved = new InterleavedStream(uvMaps[i].uv, 2);
-      LZMA.decompress(stream, interleaved);
+      LZMA.decompress(stream, interleaved, interleaved.data.length);
       
       restoreMap(uvMaps[i].uv, 2, precision);
     }
@@ -98,7 +98,7 @@ class ReaderMG2 extends Reader {
       stream.readInt32(); //packed size
   
       var interleaved = new InterleavedStream(attrMaps[i].attr, 4);
-      LZMA.decompress(stream, interleaved);
+      LZMA.decompress(stream, interleaved, interleaved.data.length);
       
       restoreMap(attrMaps[i].attr, 4, precision);
     }
@@ -122,7 +122,7 @@ class FileMG2Header {
   var sizex, sizey, sizez;
   
   
-  FileMG2Header (stream){
+  FileMG2Header (Stream stream){
     stream.readInt32(); //magic "MG2H"
     vertexPrecision = stream.readFloat32();
     normalPrecision = stream.readFloat32();

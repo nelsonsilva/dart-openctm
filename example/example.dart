@@ -33,9 +33,11 @@ const shaderFS = '''
   }
 ''';
 
-var request;
-var file;
-var gl;
+
+WebGLRenderingContext gl;
+CanvasElement canvas;
+CTM.File file;
+
 var shaderProgram;
 var mvMatrix;
 var pMatrix;
@@ -46,23 +48,27 @@ var offsets = [];
 var mouseDown = false;
 var lastMouseX;
 var lastMouseY;
-var translationMatrix = vec3.create();
-var rotationMatrix = mat4.create();
+var translationMatrix;
+var rotationMatrix;
 
-window.requestAnimFrame = (function(){
-  return window.requestAnimationFrame ||
-         window.webkitRequestAnimationFrame ||
-         window.mozRequestAnimationFrame ||
-         window.oRequestAnimationFrame ||
-         window.msRequestAnimationFrame ||
-         function(callback, element){
-           window.setTimeout(callback, 1000/60);
-         };
-})(); 
-
-function formatNumber(numero, decimales){
-  var pot = Math.pow(10, decimales);
-  return parseInt(numero * pot) / pot;
+Future _get(filename, [Element progress]) {
+  Completer completer = new Completer();
+  var request = new HttpRequest();
+  request.open("GET", filename, true);
+  request.overrideMimeType("text/plain; charset=x-user-defined");
+  request.on.readyStateChange.add( (e){
+    if (request.readyState == HttpRequest.LOADING || request.readyState == HttpRequest.DONE){
+      if (progress != null) {
+        var size = (request.responseText.length / 1048576).toStringAsPrecision(2);
+        document.query("#progress").innerHTML = "Downloading... $size MB";
+      }
+    }
+    if (request.readyState == HttpRequest.DONE && (request.status == 200 || request.status == 0) ){
+      completer.complete(request.responseText);
+    }
+  });
+  request.send();
+  return completer.future;
 }
 
 main(){
@@ -70,26 +76,23 @@ main(){
   pMatrix = new Matrix4();
   translationMatrix = new Vector3();
   rotationMatrix = new Matrix4();
-
+  var progress = document.query("#progress");
+  _get("male02.ctm", progress).then((responseText) {
+    progress.innerHTML = "Unpacking...";
+    loaded(responseText);
+    progress.innerHTML = "";
+  });
   
-  request = new XMLHttpRequest();
-  request.open("GET", "male02.ctm", true);
-  request.overrideMimeType("text/plain; charset=x-user-defined");
-  request.on.readyStateChange.add(e){
-    if (request.readyState == 3 || request.readyState == 4){
-      document.query("#progress").innerHTML = "Downloading... "
-        + formatNumber(this.responseText.length / 1048576, 2) + " MB";
-    }
-    if (this.readyState == 4 && (this.status == 200 || this.status == 0) ){
-      document.getElementById("progress").innerHTML = "Unpacking...";
-      setTimeout(loaded, 1);
-    }
-  }
-  request.send();
 }
 
-function loaded(){
-  if ( navigator.userAgent.indexOf("WebKit") == -1){
+/* TODO - Make an isolate from this worker.js
+self.onmessage = function(event){
+  self.postMessage( new CTM.File( new CTM.Stream(event.data) ) );
+  self.close();
+}*/
+
+loaded(responseText){
+  /*if ( window.navigator.userAgent.indexOf("WebKit") == -1){
     var worker = new Worker("loader.js");
     
     worker.onmessage = function(event){
@@ -100,15 +103,15 @@ function loaded(){
     
     worker.postMessage(request.responseText);
     
-  }else{
-      file = new CTM.File( new CTM.Stream(request.responseText) );
+  }else{ */
+      file = new CTM.File( new CTM.Stream(responseText) );
       webGLStart();
-      document.getElementById("progress").innerHTML = "";
-  }
+      
+  //}
 }
 
-function webGLStart(){
-  var canvas = document.getElementById("canvas") ;
+webGLStart(){
+  CanvasElement canvas = document.query("#canvas") ;
 
   initGL(canvas);
   initBoundingBox();
@@ -117,38 +120,35 @@ function webGLStart(){
   initBuffers();
 
   gl.clearColor(1.0, 1.0, 1.0, 1.0);
-  gl.enable(gl.DEPTH_TEST);
-  gl.viewport(0, 0, gl.viewportWidth, gl.viewportHeight);
+  gl.enable(WebGLRenderingContext.DEPTH_TEST);
+  gl.viewport(0, 0, canvas.width, canvas.height);
 
-  vec3.set(translationMatrix, [0, 0, 0]);
-  mat4.identity(rotationMatrix);
+  translationMatrix.setValues(0, 0, 0);
+  rotationMatrix.identity();
 
-  canvas.onmousedown = handleMouseDown;
-  document.onmouseup = handleMouseUp;
-  document.onmousemove = handleMouseMove;
-  document.onmousewheel = handleMouseWheel;
+  canvas.on.mouseDown.add(handleMouseDown);
+  document.on.mouseUp.add(handleMouseUp);
+  document.on.mouseMove.add(handleMouseMove);
+  document.on.mouseWheel.add(handleMouseWheel);
   
-  window.addEventListener("DOMMouseScroll", handleMouseWheel, false); 
+  window.on["DOMMouseScroll"].add(handleMouseWheel, false); 
   
-  tick();
+  tick(0);
 }
 
-function initGL(canvas){
+initGL(canvas){
   try{
     gl = canvas.getContext("experimental-webgl");
-    gl.viewportWidth = canvas.width;
-    gl.viewportHeight = canvas.height;
-  }catch(e){
-  }
-  if (!gl){
-    alert("Could not initialise WebGL, sorry :-(");
+  }catch(e){ }
+  if (gl == null){
+    window.alert("Could not initialise WebGL, sorry :-(");
   }
 }
  
-function initBoundingBox(){
+initBoundingBox(){
   var v = file.body.vertices;
-  var x = Infinity, y = Infinity, z = Infinity;
-  var X = -Infinity, Y = -Infinity, Z = -Infinity;
+  var x = double.INFINITY, y = double.INFINITY, z = double.INFINITY;
+  var X = double.NEGATIVE_INFINITY, Y = double.NEGATIVE_INFINITY, Z = double.NEGATIVE_INFINITY;
   
   for (var i = 0; i < v.length; i += 3){
     if (v[i] < x) x = v[i];
@@ -167,14 +167,16 @@ function initBoundingBox(){
   }
 }
 
-function initOffsets(){
+initOffsets(){
   var indices = file.body.indices;
   var start = 0;
   var min = file.body.vertices.length;
   var max = 0;
   var minPrev = min;
   
-  for (var i = 0; i < indices.length;){
+  var i;
+  
+  for (i = 0; i < indices.length;){
 
     for (var j = 0; j < 3; ++ j){
       var idx = indices[i ++];
@@ -189,7 +191,7 @@ function initOffsets(){
       for (var k = start; k < i; ++ k){
         indices[k] -= minPrev;
       }
-      offsets.push( {start: start, count: i - start, index: minPrev} );
+      offsets.add( {"start": start, "count": i - start, "index": minPrev} );
       
       start = i;
       min = file.body.vertices.length;
@@ -202,13 +204,18 @@ function initOffsets(){
   for (var k = start; k < i; ++ k){
     indices[k] -= minPrev;
   }
-  offsets.push( {start: start, count: i - start, index: minPrev} );
+  offsets.add( {"start": start, "count": i - start, "index": minPrev} );
 }
  
-function initShaders(){
-  var fragmentShader = getShader(gl, "shader-fs");
-  var vertexShader = getShader(gl, "shader-vs");
+initShaders(){
+  var fragmentShader = gl.createShader(WebGLRenderingContext.FRAGMENT_SHADER);
+  gl.shaderSource(fragmentShader, shaderFS);
+  gl.compileShader(fragmentShader);
 
+  var vertexShader = gl.createShader(WebGLRenderingContext.VERTEX_SHADER);
+  gl.shaderSource(vertexShader, shaderVS);
+  gl.compileShader(vertexShader);
+  
   shaderProgram = gl.createProgram();
   gl.attachShader(shaderProgram, vertexShader);
   gl.attachShader(shaderProgram, fragmentShader);
@@ -225,96 +232,81 @@ function initShaders(){
   shaderProgram.mvMatrixUniform = gl.getUniformLocation(shaderProgram, "uMVMatrix");
 }
 
-function getShader(gl, id){
-  var shaderScript = document.getElementById(id);
-
-  var str = "";
-  var node = shaderScript.firstChild;
-  while(node){
-    if (node.nodeType == 3){
-      str += node.textContent;
-    }
-    node = node.nextSibling;
-  }
-
-  var shader;
-  if (shaderScript.type == "x-shader/x-fragment"){
-    shader = gl.createShader(gl.FRAGMENT_SHADER);
-  }else if (shaderScript.type == "x-shader/x-vertex"){
-    shader = gl.createShader(gl.VERTEX_SHADER);
-  }
-  
-  gl.shaderSource(shader, str);
-  gl.compileShader(shader);
-
-  return shader;
-}
-
-function initBuffers(){
+initBuffers(){
   vertexIndexBuffer = gl.createBuffer();
-  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, vertexIndexBuffer);
-  gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,
-    new Uint16Array(file.body.indices), gl.STATIC_DRAW);
+  gl.bindBuffer(WebGLRenderingContext.ELEMENT_ARRAY_BUFFER, vertexIndexBuffer);
+  gl.bufferData(WebGLRenderingContext.ELEMENT_ARRAY_BUFFER,
+    new Uint16Array.fromList(file.body.indices), WebGLRenderingContext.STATIC_DRAW);
   vertexIndexBuffer.itemSize = 1;
   vertexIndexBuffer.numItems = file.body.indices.length;
 
   vertexPositionBuffer = gl.createBuffer();
-  gl.bindBuffer(gl.ARRAY_BUFFER, vertexPositionBuffer);
-  gl.bufferData(gl.ARRAY_BUFFER,
-    file.body.vertices, gl.STATIC_DRAW);
+  gl.bindBuffer(WebGLRenderingContext.ARRAY_BUFFER, vertexPositionBuffer);
+  gl.bufferData(WebGLRenderingContext.ARRAY_BUFFER,
+    file.body.vertices, WebGLRenderingContext.STATIC_DRAW);
   vertexPositionBuffer.itemSize = 3;
   vertexPositionBuffer.numItems = file.body.vertices.length;
 
+  var vertexColors;
+  if (file.body.attrMaps != null) {
+    vertexColors = file.body.attrMaps[0]["attr"];      
+  } else {
+    vertexColors = new Float32Array(file.body.vertices.length * 4);
+    for (var i = 0; i < file.body.vertices.length; i ++) {
+            vertexColors[i] = 0;
+            vertexColors[i + 1] = 0;
+            vertexColors[i + 2] = 0;
+            vertexColors[i + 3] = 0;
+    }
+  }
+
+  
   vertexColorBuffer = gl.createBuffer();
-  gl.bindBuffer(gl.ARRAY_BUFFER, vertexColorBuffer);
-  gl.bufferData(gl.ARRAY_BUFFER,
-    file.body.attrMaps[0].attr, gl.STATIC_DRAW);
+  gl.bindBuffer(WebGLRenderingContext.ARRAY_BUFFER, vertexColorBuffer);
+  gl.bufferData(WebGLRenderingContext.ARRAY_BUFFER, vertexColors, WebGLRenderingContext.STATIC_DRAW);
   vertexColorBuffer.itemSize = 4;
-  vertexColorBuffer.numItems = file.body.attrMaps[0].attr.length;
+  vertexColorBuffer.numItems = vertexColors.length;
 }
 
-function tick(){
+tick(int time){
   drawScene();
-  requestAnimFrame(tick);
+  window.requestAnimationFrame(tick);
 }
 
-function drawScene(){
-  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+drawScene(){
+  gl.clear(WebGLRenderingContext.COLOR_BUFFER_BIT | WebGLRenderingContext.DEPTH_BUFFER_BIT);
 
-  mat4.perspective(45, gl.viewportWidth / gl.viewportHeight, 0.1, 100.0, pMatrix);
-  mat4.translate(pMatrix, [0.0, 0, -0.6]);
+  pMatrix.perspective(45, canvas.width / canvas.height, 0.1, 100.0);
+  pMatrix.translate(new Vector3(0.0, 0, -0.6));
 
-  mat4.identity(mvMatrix);
-  mat4.translate(mvMatrix, translationMatrix);
-  mat4.multiply(mvMatrix, rotationMatrix);
+  mvMatrix.identity();
+  mvMatrix.translate(translationMatrix);
+  mvMatrix.multiply(rotationMatrix);
 
   gl.uniformMatrix4fv(shaderProgram.pMatrixUniform, false, pMatrix);
   gl.uniformMatrix4fv(shaderProgram.mvMatrixUniform, false, mvMatrix);
   
-  var normalMatrix = mat3.create();
-  mat4.toInverseMat3(mvMatrix, normalMatrix);
-  mat3.transpose(normalMatrix);
+  var normalMatrix = mvMatrix.toInverseMat3();
+  normalMatrix.transpose();
   gl.uniformMatrix3fv(shaderProgram.nMatrixUniform, false, normalMatrix);
 
   for (var i = 0; i < offsets.length; ++ i){
-    gl.bindBuffer(gl.ARRAY_BUFFER, vertexPositionBuffer);
+    gl.bindBuffer(WebGLRenderingContext.ARRAY_BUFFER, vertexPositionBuffer);
     gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute,
-      vertexPositionBuffer.itemSize, gl.FLOAT, false, 0, offsets[i].index * 4 * 3);
+      vertexPositionBuffer.itemSize, WebGLRenderingContext.FLOAT, false, 0, offsets[i].index * 4 * 3);
 
-    gl.bindBuffer(gl.ARRAY_BUFFER, vertexColorBuffer);
+    gl.bindBuffer(WebGLRenderingContext.ARRAY_BUFFER, vertexColorBuffer);
     gl.vertexAttribPointer(shaderProgram.vertexColorAttribute,
-      vertexColorBuffer.itemSize, gl.FLOAT, false, 0, offsets[i].index * 4 * 4);
+      vertexColorBuffer.itemSize, WebGLRenderingContext.FLOAT, false, 0, offsets[i].index * 4 * 4);
 
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, vertexIndexBuffer);
-    gl.drawElements(gl.TRIANGLES, offsets[i].count, gl.UNSIGNED_SHORT, offsets[i].start * 2); // 2 = uint16
+    gl.bindBuffer(WebGLRenderingContext.ELEMENT_ARRAY_BUFFER, vertexIndexBuffer);
+    gl.drawElements(WebGLRenderingContext.TRIANGLES, offsets[i].count, WebGLRenderingContext.UNSIGNED_SHORT, offsets[i].start * 2); // 2 = uint16
   }
 }
 
-function degToRad(degrees){
-  return degrees * Math.PI / 180;
-}
+degToRad(degrees) => degrees * Math.PI / 180;
 
-function handleMouseWheel(event){
+handleMouseWheel(event){
   var delta = event.wheelDelta | -event.detail;
   if (delta < 0){
     translationMatrix[2] -= .05;
@@ -323,33 +315,33 @@ function handleMouseWheel(event){
   }
 }
   
-function handleMouseDown(event){
+handleMouseDown(event){
   mouseDown = true;
   lastMouseX = event.clientX;
   lastMouseY = event.clientY;
 }
 
-function handleMouseUp(event){
+handleMouseUp(event){
   mouseDown = false;
 }
 
-function handleMouseMove(event){
+handleMouseMove(MouseEvent event){
   if (mouseDown){
     var newX = event.clientX;
     var newY = event.clientY;
 
-    var newRotationMatrix = mat4.create();
-    mat4.identity(newRotationMatrix);
+    var newRotationMatrix = new Matrix4();
+    newRotationMatrix.identity();
     
     var deltaX = newX - lastMouseX;
-    mat4.rotate(newRotationMatrix, degToRad(deltaX / 5), [0, 1, 0]);
+    newRotationMatrix.rotate(degToRad(deltaX / 5), new Vector3(0, 1, 0));
 
     var deltaY = newY - lastMouseY;
-    mat4.rotate(newRotationMatrix, degToRad(deltaY / 5), [1, 0, 0]);
+    newRotationMatrix.rotate(degToRad(deltaY / 5), new Vector3(1, 0, 0));
 
-    mat4.multiply(newRotationMatrix, rotationMatrix, rotationMatrix);
+    rotationMatrix.multiply(newRotationMatrix, rotationMatrix);
 
-    lastMouseX = newX
+    lastMouseX = newX;
     lastMouseY = newY;
   }
 }

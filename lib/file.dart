@@ -40,7 +40,7 @@ class FileHeader {
     comment = stream.readString();
   }
 
-  get hasNormals => flags & Flags.NORMALS;
+  bool get hasNormals => (flags & Flags.NORMALS) > 0;
 }
 
 class FileBody {
@@ -51,10 +51,10 @@ class FileBody {
 
   List<Map<String, Float32Array>> uvMaps, attrMaps;
   
-  FileBody(header) {
+  FileBody(FileHeader header) {
     var i = header.triangleCount * 3,
         v = header.vertexCount * 3,
-        n = header.hasNormals()? header.vertexCount * 3: 0,
+        n = header.hasNormals ? header.vertexCount * 3: 0,
         u = header.vertexCount * 2,
         a = header.vertexCount * 4,
         j = 0;
@@ -70,14 +70,14 @@ class FileBody {
       normals = new Float32Array.fromBuffer(data, (i + v) * 4, n);
     }
     
-    if (header.uvMapCount){
+    if (header.uvMapCount > 0){
       uvMaps = new List(header.uvMapCount);
       for (j = 0; j < header.uvMapCount; ++ j){
         uvMaps[j] = {"uv": new Float32Array.fromBuffer(data, (i + v + n + (j * u) ) * 4, u) };
       }
     }
     
-    if (header.attrMapCount){
+    if (header.attrMapCount > 0){
       attrMaps = new List(header.attrMapCount);
       for (j = 0; j < header.attrMapCount; ++ j){
         attrMaps[j] = {"attr": new Float32Array.fromBuffer(data,
